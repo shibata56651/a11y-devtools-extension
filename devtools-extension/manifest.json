@@ -1,0 +1,14 @@
+{
+  "name": "JIS X 8341-3:2016 Checker",
+  "version": "1.0",
+  "manifest_version": 3,
+  "description": "DevToolsパネルでJIS X 8341-3:2016の違反をチェックし、該当箇所をハイライトします。",
+  "devtools_page": "devtools.html",
+  "permissions": ["scripting", "activeTab", "storage"],
+  "host_permissions": ["<all_urls>"],
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
