@@ -142,7 +142,6 @@ document.addEventListener("DOMContentLoaded", () => {
               document
                 .querySelectorAll(selector)
                 .forEach((element, nodeIndex) => {
-                  // アウトラインを追加してエラー箇所を強調
                   element.style.outline = "3px solid red";
                   element.style.position
                     ? element.style.position
@@ -151,54 +150,51 @@ document.addEventListener("DOMContentLoaded", () => {
                     "scroll-target-" + (index + 1) + "-" + (nodeIndex + 1)
                   );
 
-                  // ラベル（エラー内容と対処法）を作成
-                  // const tooltip = document.createElement("div");
-                  // tooltip.style.position = "absolute";
-                  // tooltip.style.background = "rgba(255, 255, 255, 0.9)";
-                  // tooltip.style.border = "1px solid #000";
-                  // tooltip.style.borderRadius = "4px";
-                  // tooltip.style.padding = "8px";
-                  // tooltip.style.color = "#000";
-                  // tooltip.style.fontSize = "12px";
-                  // tooltip.style.whiteSpace = "pre-wrap";
-                  // tooltip.style.zIndex = "1000";
-                  // tooltip.style.top = "100%";
-                  // tooltip.style.left = "0";
-                  // tooltip.style.marginTop = "4px";
-                  // tooltip.style.boxShadow = "0 4px 6px rgba(0, 0, 0, 0.1)";
-                  // tooltip.style.width = "300px";
+                  const tooltip = document.createElement("div");
+                  tooltip.style.position = "absolute";
+                  tooltip.style.background = "rgba(255, 255, 255, 0.9)";
+                  tooltip.style.border = "1px solid #000";
+                  tooltip.style.borderRadius = "4px";
+                  tooltip.style.padding = "8px";
+                  tooltip.style.color = "#000";
+                  tooltip.style.fontSize = "12px";
+                  tooltip.style.whiteSpace = "pre-wrap";
+                  tooltip.style.zIndex = "1000";
+                  tooltip.style.top = "100%";
+                  tooltip.style.left = "0";
+                  tooltip.style.marginTop = "4px";
+                  tooltip.style.boxShadow = "0 4px 6px rgba(0, 0, 0, 0.1)";
+                  tooltip.style.width = "300px";
 
                   // console.log("summary:", Id);
 
                   // 対応する翻訳データを取得
-                  // const failureSummaryKey = failureSummaries.find((summary) => {
-                  // console.log("summary", summary);
-                  // console.log(
-                  //   "translationCategoryMap",
-                  //   translationCategoryMap[summary]
-                  // );
-                  // });
+                  const failureSummaryKey = failureSummaries.find((summary) => {
+                    console.log("summary", summary);
+                    console.log(
+                      "translationCategoryMap",
+                      translationCategoryMap[summary]
+                    );
+                  });
 
-                  // if (failureSummaryKey) {
-                  //   const translationData =
-                  //     translationCategoryMap[failureSummaryKey];
-                  //   tooltip.innerText = `エラー内容: ${translationData.translation}\n説明: ${translationData.description}\n詳細情報: ${translationData.url}`;
-                  // } else {
-                  //   tooltip.innerText =
-                  //     "対応する翻訳データが見つかりませんでした";
-                  // }
+                  if (failureSummaryKey) {
+                    const translationData =
+                      translationCategoryMap[failureSummaryKey];
+                    tooltip.innerText = `エラー内容: ${translationData.translation}\n説明: ${translationData.description}\n詳細情報: ${translationData.url}`;
+                  } else {
+                    tooltip.innerText =
+                      "対応する翻訳データが見つかりませんでした";
+                  }
 
-                  // ツールチップを親要素に追加
-                  // element.appendChild(tooltip);
+                  element.appendChild(tooltip);
 
-                  // ツールチップをホバーで表示/非表示
-                  // tooltip.style.display = "none";
-                  // element.addEventListener("mouseenter", () => {
-                  //   tooltip.style.display = "block";
-                  // });
-                  // element.addEventListener("mouseleave", () => {
-                  //   tooltip.style.display = "none";
-                  // });
+                  tooltip.style.display = "none";
+                  element.addEventListener("mouseenter", () => {
+                    tooltip.style.display = "block";
+                  });
+                  element.addEventListener("mouseleave", () => {
+                    tooltip.style.display = "none";
+                  });
                 });
             },
             args: [
