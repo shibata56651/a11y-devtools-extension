@@ -1,9 +1,16 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
   <head>
-    <title>JIS X 8341-3 Checker</title>
+    <meta charset="UTF-8" />
+    <title>Accessibility Checker</title>
+    <script src="axe.min.js"></script>
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.4.1/axe.min.js"></script> -->
+    <script src="./devtools_init.js" defer></script>
+    <script src="./devtools.js" defer></script>
   </head>
   <body>
-    <script src="devtools.js"></script>
+    <h1>アクセシビリティ検査</h1>
+    <button id="runCheck">検閲する</button>
+    <pre id="results"></pre>
   </body>
 </html>
