@@ -3,51 +3,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const runCheckButton = document.getElementById("runCheck");
   const resultsElement = document.getElementById("results");
 
-  // 翻訳マッピング
-  const translationCategoryMap = {
-    "color-contrast": {
-      translation: "色のコントラスト",
-      description: "要素の色のコントラストが十分であることを確認する",
-      url: "https://dequeuniversity.com/rules/axe/4.4/color-contrast?application=axeAPI",
-    },
-    "definition-list": {
-      translation: "定義リスト",
-      description: "dl要素が正しく使用されていることを確認する",
-      url: "https://dequeuniversity.com/rules/axe/4.4/definition-list?application=axeAPI",
-    },
-    "duplicate-id": {
-      translation: "複製ID",
-      description: "すべてのid属性値が一意であることを保証する",
-      url: "https://dequeuniversity.com/rules/axe/4.4/duplicate-id?application=axeAPI",
-    },
-    "frame-title": {
-      translation: "フレームタイトル",
-      description: "<iframe>要素と<frame>要素にアクセス可能な名前を持たせる",
-      url: "https://dequeuniversity.com/rules/axe/4.4/frame-title?application=axeAPI",
-    },
-    "heading-order": {
-      translation: "見出しの順序",
-      description: "見出し要素が正しい順序で使用されていることを確認する",
-      url: "https://dequeuniversity.com/rules/axe/4.4/heading-order?application=axeAPI",
-    },
-    "image-alt": {
-      translation: "画像のalt属性",
-      description: "画像にalt属性があることを確認する",
-      url: "https://dequeuniversity.com/rules/axe/4.4/image-alt?application=axeAPI",
-    },
-    "link-name": {
-      translation: "リンクのテキスト",
-      description: "リンクに識別可能なテキストがあることを保証する",
-      url: "https://dequeuniversity.com/rules/axe/4.4/link-name?application=axeAPI",
-    },
-    region: {
-      translation: "ランドマーク",
-      description:
-        "すべてのページコンテンツがランドマークで囲まれていることを確認する",
-      url: "https://dequeuniversity.com/rules/axe/4.4/region?application=axeAPI",
-    },
-  };
-
   if (!runCheckButton || !resultsElement) {
     console.error("必要な要素が見つかりません: runCheck または results");
     return;
@@ -60,36 +15,50 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // axe.run を対象ページで実行
       const scriptSrc = chrome.runtime.getURL("axe.min.js");
+      const localeSrc = chrome.runtime.getURL("ja.json");
 
       const result = await new Promise((resolve, reject) => {
         chrome.scripting.executeScript(
           {
             target: { tabId: chrome.devtools.inspectedWindow.tabId },
             world: "MAIN",
-            func: (src) => {
+            func: (src, localeSrc) => {
               return new Promise((innerResolve, innerReject) => {
                 console.log("スクリプトが注入されました:", src);
 
                 const script = document.createElement("script");
                 script.src = src;
 
-                script.onload = () => {
+                script.onload = async () => {
                   if (!window.axe || typeof window.axe.run !== "function") {
                     console.error("axe-core の run メソッドが利用できません");
                     innerReject("axe-core の run メソッドが利用できません");
                     return;
                   }
 
-                  window.axe
-                    .run()
-                    .then((results) => {
-                      console.log("検査結果:", results);
-                      innerResolve({ success: true, results });
-                    })
-                    .catch((err) => {
-                      console.error("axe-core 実行中にエラーが発生:", err);
-                      innerReject({ success: false, error: err.message });
-                    });
+                  try {
+                    // 日本語ロケールを読み込み
+                    const response = await fetch(localeSrc);
+                    const localeData = await response.json();
+
+                    // axe-coreに日本語ロケールを適用
+                    window.axe.configure({ locale: localeData });
+                    console.log("日本語ロケールが適用されました");
+
+                    window.axe
+                      .run()
+                      .then((results) => {
+                        console.log("検査結果:", results);
+                        innerResolve({ success: true, results });
+                      })
+                      .catch((err) => {
+                        console.error("axe-core 実行中にエラーが発生:", err);
+                        innerReject({ success: false, error: err.message });
+                      });
+                  } catch (err) {
+                    console.error("ロケールの読み込みに失敗:", err);
+                    innerReject({ success: false, error: err.message });
+                  }
                 };
 
                 script.onerror = () => {
@@ -103,7 +72,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 document.head.appendChild(script);
               });
             },
-            args: [scriptSrc],
+            args: [scriptSrc, localeSrc],
           },
           (injectionResults) => {
             if (chrome.runtime.lastError) {
@@ -136,7 +105,8 @@ document.addEventListener("DOMContentLoaded", () => {
             func: (
               selector,
               failureSummaries,
-              translationCategoryMap,
+              violationHelp,
+              violationHelpUrl,
               index
             ) => {
               document
@@ -166,25 +136,9 @@ document.addEventListener("DOMContentLoaded", () => {
                   tooltip.style.boxShadow = "0 4px 6px rgba(0, 0, 0, 0.1)";
                   tooltip.style.width = "300px";
 
-                  // console.log("summary:", Id);
-
-                  // 対応する翻訳データを取得
-                  const failureSummaryKey = failureSummaries.find((summary) => {
-                    console.log("summary", summary);
-                    console.log(
-                      "translationCategoryMap",
-                      translationCategoryMap[summary]
-                    );
-                  });
-
-                  if (failureSummaryKey) {
-                    const translationData =
-                      translationCategoryMap[failureSummaryKey];
-                    tooltip.innerText = `エラー内容: ${translationData.translation}\n説明: ${translationData.description}\n詳細情報: ${translationData.url}`;
-                  } else {
-                    tooltip.innerText =
-                      "対応する翻訳データが見つかりませんでした";
-                  }
+                  // axe-coreから返された日本語メッセージを使用
+                  const failureSummary = failureSummaries[nodeIndex] || "エラーの詳細情報なし";
+                  tooltip.innerText = `エラー内容: ${violationHelp}\n\n詳細: ${failureSummary}\n\n参考: ${violationHelpUrl}`;
 
                   element.appendChild(tooltip);
 
@@ -200,7 +154,8 @@ document.addEventListener("DOMContentLoaded", () => {
             args: [
               violation.nodes.map((node) => node.target.join(", ")).join(", "),
               violation.nodes.map((node) => node.failureSummary), // failureSummary のリスト
-              translationCategoryMap, // 翻訳データ
+              violation.help, // 日本語化されたヘルプメッセージ
+              violation.helpUrl, // 参考URL
               index,
             ],
           });
@@ -221,10 +176,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const nodeDetails = violation.nodes
               .map((node, nodeIndex) => {
                 const selectors = node.target.join(", ");
-                const failureSummary = node.failureSummary
-                  ? translationCategoryMap[node.failureSummary]?.description ||
-                    node.failureSummary
-                  : "理由の説明はありません";
+                const failureSummary = node.failureSummary || "理由の説明はありません";
 
                 // クリック可能なリンクを作成
                 return `
