@@ -8,6 +8,35 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
+  // 翻訳関数（MyMemory Translation API使用）
+  async function translateText(text) {
+    try {
+      const response = await fetch(
+        `https://api.mymemory.translated.net/get?q=${encodeURIComponent(
+          text
+        )}&langpair=en|ja`
+      );
+      const data = await response.json();
+      return data.responseData.translatedText || text;
+    } catch (error) {
+      console.error("翻訳エラー:", error);
+      return text; // 翻訳失敗時は元のテキストを返す
+    }
+  }
+
+  // 複数のテキストを翻訳（レート制限を考慮して遅延を入れる）
+  async function translateMultiple(texts) {
+    const translations = {};
+    for (const text of texts) {
+      if (!translations[text]) {
+        translations[text] = await translateText(text);
+        // レート制限回避のため少し待機
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+    return translations;
+  }
+
   // ボタンのクリックイベントを設定
   runCheckButton.addEventListener("click", async () => {
     try {
@@ -15,18 +44,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // axe.run を対象ページで実行
       const scriptSrc = chrome.runtime.getURL("axe.min.js");
-      const localeSrc = chrome.runtime.getURL("ja.json");
-
-      // DevToolsパネルのコンテキストで日本語ロケールを読み込む
-      const localeResponse = await fetch(localeSrc);
-      const localeData = await localeResponse.json();
 
       const result = await new Promise((resolve, reject) => {
         chrome.scripting.executeScript(
           {
             target: { tabId: chrome.devtools.inspectedWindow.tabId },
             world: "MAIN",
-            func: (src, localeData) => {
+            func: (src) => {
               return new Promise((innerResolve, innerReject) => {
                 console.log("スクリプトが注入されました:", src);
 
@@ -40,25 +64,16 @@ document.addEventListener("DOMContentLoaded", () => {
                     return;
                   }
 
-                  try {
-                    // axe-coreに日本語ロケールを適用
-                    window.axe.configure({ locale: localeData });
-                    console.log("日本語ロケールが適用されました");
-
-                    window.axe
-                      .run()
-                      .then((results) => {
-                        console.log("検査結果:", results);
-                        innerResolve({ success: true, results });
-                      })
-                      .catch((err) => {
-                        console.error("axe-core 実行中にエラーが発生:", err);
-                        innerReject({ success: false, error: err.message });
-                      });
-                  } catch (err) {
-                    console.error("ロケールの設定に失敗:", err);
-                    innerReject({ success: false, error: err.message });
-                  }
+                  window.axe
+                    .run()
+                    .then((results) => {
+                      console.log("検査結果:", results);
+                      innerResolve({ success: true, results });
+                    })
+                    .catch((err) => {
+                      console.error("axe-core 実行中にエラーが発生:", err);
+                      innerReject({ success: false, error: err.message });
+                    });
                 };
 
                 script.onerror = () => {
@@ -72,7 +87,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 document.head.appendChild(script);
               });
             },
-            args: [scriptSrc, localeData],
+            args: [scriptSrc],
           },
           (injectionResults) => {
             if (chrome.runtime.lastError) {
@@ -98,6 +113,24 @@ document.addEventListener("DOMContentLoaded", () => {
       if (result.success) {
         const violations = result.results.violations;
 
+        // 翻訳が必要なテキストを収集
+        const textsToTranslate = new Set();
+        violations.forEach((violation) => {
+          textsToTranslate.add(violation.help);
+          textsToTranslate.add(violation.description);
+          violation.nodes.forEach((node) => {
+            if (node.failureSummary) {
+              textsToTranslate.add(node.failureSummary);
+            }
+          });
+        });
+
+        // 翻訳を実行
+        console.log("翻訳を開始します...");
+        resultsElement.innerText = "エラーメッセージを日本語に翻訳中...";
+        const translations = await translateMultiple([...textsToTranslate]);
+        console.log("翻訳完了:", translations);
+
         // 違反箇所をハイライト
         violations.forEach((violation, index) => {
           chrome.scripting.executeScript({
@@ -107,7 +140,8 @@ document.addEventListener("DOMContentLoaded", () => {
               failureSummaries,
               violationHelp,
               violationHelpUrl,
-              index
+              index,
+              translations
             ) => {
               document
                 .querySelectorAll(selector)
@@ -136,9 +170,12 @@ document.addEventListener("DOMContentLoaded", () => {
                   tooltip.style.boxShadow = "0 4px 6px rgba(0, 0, 0, 0.1)";
                   tooltip.style.width = "300px";
 
-                  // axe-coreから返された日本語メッセージを使用
-                  const failureSummary = failureSummaries[nodeIndex] || "エラーの詳細情報なし";
-                  tooltip.innerText = `エラー内容: ${violationHelp}\n\n詳細: ${failureSummary}\n\n参考: ${violationHelpUrl}`;
+                  // 翻訳されたメッセージを使用
+                  const originalFailureSummary = failureSummaries[nodeIndex] || "エラーの詳細情報なし";
+                  const translatedHelp = translations[violationHelp] || violationHelp;
+                  const translatedFailureSummary = translations[originalFailureSummary] || originalFailureSummary;
+
+                  tooltip.innerText = `エラー内容: ${translatedHelp}\n\n詳細: ${translatedFailureSummary}\n\n参考: ${violationHelpUrl}`;
 
                   element.appendChild(tooltip);
 
@@ -154,9 +191,10 @@ document.addEventListener("DOMContentLoaded", () => {
             args: [
               violation.nodes.map((node) => node.target.join(", ")).join(", "),
               violation.nodes.map((node) => node.failureSummary), // failureSummary のリスト
-              violation.help, // 日本語化されたヘルプメッセージ
+              violation.help, // ヘルプメッセージ
               violation.helpUrl, // 参考URL
               index,
+              translations, // 翻訳データ
             ],
           });
         });
@@ -166,17 +204,21 @@ document.addEventListener("DOMContentLoaded", () => {
           resultsElement.innerText = "検査結果: 問題は検出されませんでした。";
         } else {
           const explanationList = violations.map((violation, index) => {
-            // 違反の概要
+            // 違反の概要（翻訳済み）
+            const translatedDescription = translations[violation.description] || violation.description;
+            const translatedHelp = translations[violation.help] || violation.help;
+
             const summary = `違反： ${index + 1}: ${violation.id}`;
-            const details = `詳細： ${violation.description}`;
-            const help = `説明： ${violation.help}`;
+            const details = `詳細： ${translatedDescription}`;
+            const help = `説明： ${translatedHelp}`;
             const helpUrl = `参考文献： ${violation.helpUrl}`;
 
             // 違反箇所のリスト
             const nodeDetails = violation.nodes
               .map((node, nodeIndex) => {
                 const selectors = node.target.join(", ");
-                const failureSummary = node.failureSummary || "理由の説明はありません";
+                const originalFailureSummary = node.failureSummary || "理由の説明はありません";
+                const translatedFailureSummary = translations[originalFailureSummary] || originalFailureSummary;
 
                 // クリック可能なリンクを作成
                 return `
@@ -186,7 +228,7 @@ document.addEventListener("DOMContentLoaded", () => {
                   nodeIndex + 1
                 }">対象 ${nodeIndex + 1}: ${selectors}</a>
                 </span>
-                <span style="display: inline-block; margin: 6px 0 0; padding: 0; word-wrap: break-word; word-break: break-word; overflow-wrap: anywhere; white-space: normal;">${failureSummary}</span>
+                <span style="display: inline-block; margin: 6px 0 0; padding: 0; word-wrap: break-word; word-break: break-word; overflow-wrap: anywhere; white-space: normal;">${translatedFailureSummary}</span>
                 `;
               })
               .join("\n");

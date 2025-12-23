@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A11y Test Page</title>
+</head>
+<body>
+    <h1>Accessibility Test Page</h1>
+
+    <!-- Missing alt attribute -->
+    <img src="test.jpg">
+
+    <!-- Low contrast -->
+    <div style="background-color: white; color: #ccc;">
+        This text has low contrast
+    </div>
+
+    <!-- Missing label -->
+    <input type="text" name="username">
+
+    <!-- Empty link -->
+    <a href="#"></a>
+
+    <!-- Duplicate ID -->
+    <div id="duplicate">First</div>
+    <div id="duplicate">Second</div>
+
+    <!-- Missing button text -->
+    <button></button>
+
+    <h1>Title</h1>
+    <h3>Skipped heading level</h3>
+</body>
+</html>
