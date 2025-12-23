@@ -14,7 +14,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["axe.min.js"],
+      "resources": ["axe.min.js", "ja.json"],
       "matches": ["<all_urls>"]
     }
   ],

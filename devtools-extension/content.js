@@ -3,54 +3,38 @@ document.addEventListener("DOMContentLoaded", () => {
   const runCheckButton = document.getElementById("runCheck");
   const resultsElement = document.getElementById("results");
 
-  // 翻訳マッピング
-  const translationCategoryMap = {
-    "color-contrast": {
-      translation: "色のコントラスト",
-      description: "要素の色のコントラストが十分であることを確認する",
-      url: "https://dequeuniversity.com/rules/axe/4.4/color-contrast?application=axeAPI",
-    },
-    "definition-list": {
-      translation: "定義リスト",
-      description: "dl要素が正しく使用されていることを確認する",
-      url: "https://dequeuniversity.com/rules/axe/4.4/definition-list?application=axeAPI",
-    },
-    "duplicate-id": {
-      translation: "複製ID",
-      description: "すべてのid属性値が一意であることを保証する",
-      url: "https://dequeuniversity.com/rules/axe/4.4/duplicate-id?application=axeAPI",
-    },
-    "frame-title": {
-      translation: "フレームタイトル",
-      description: "<iframe>要素と<frame>要素にアクセス可能な名前を持たせる",
-      url: "https://dequeuniversity.com/rules/axe/4.4/frame-title?application=axeAPI",
-    },
-    "heading-order": {
-      translation: "見出しの順序",
-      description: "見出し要素が正しい順序で使用されていることを確認する",
-      url: "https://dequeuniversity.com/rules/axe/4.4/heading-order?application=axeAPI",
-    },
-    "image-alt": {
-      translation: "画像のalt属性",
-      description: "画像にalt属性があることを確認する",
-      url: "https://dequeuniversity.com/rules/axe/4.4/image-alt?application=axeAPI",
-    },
-    "link-name": {
-      translation: "リンクのテキスト",
-      description: "リンクに識別可能なテキストがあることを保証する",
-      url: "https://dequeuniversity.com/rules/axe/4.4/link-name?application=axeAPI",
-    },
-    region: {
-      translation: "ランドマーク",
-      description:
-        "すべてのページコンテンツがランドマークで囲まれていることを確認する",
-      url: "https://dequeuniversity.com/rules/axe/4.4/region?application=axeAPI",
-    },
-  };
-
   if (!runCheckButton || !resultsElement) {
     console.error("必要な要素が見つかりません: runCheck または results");
     return;
+  }
+
+  // 翻訳関数（MyMemory Translation API使用）
+  async function translateText(text) {
+    try {
+      const response = await fetch(
+        `https://api.mymemory.translated.net/get?q=${encodeURIComponent(
+          text
+        )}&langpair=en|ja`
+      );
+      const data = await response.json();
+      return data.responseData.translatedText || text;
+    } catch (error) {
+      console.error("翻訳エラー:", error);
+      return text; // 翻訳失敗時は元のテキストを返す
+    }
+  }
+
+  // 複数のテキストを翻訳（レート制限を考慮して遅延を入れる）
+  async function translateMultiple(texts) {
+    const translations = {};
+    for (const text of texts) {
+      if (!translations[text]) {
+        translations[text] = await translateText(text);
+        // レート制限回避のため少し待機
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+    return translations;
   }
 
   // ボタンのクリックイベントを設定
@@ -129,6 +113,24 @@ document.addEventListener("DOMContentLoaded", () => {
       if (result.success) {
         const violations = result.results.violations;
 
+        // 翻訳が必要なテキストを収集
+        const textsToTranslate = new Set();
+        violations.forEach((violation) => {
+          textsToTranslate.add(violation.help);
+          textsToTranslate.add(violation.description);
+          violation.nodes.forEach((node) => {
+            if (node.failureSummary) {
+              textsToTranslate.add(node.failureSummary);
+            }
+          });
+        });
+
+        // 翻訳を実行
+        console.log("翻訳を開始します...");
+        resultsElement.innerText = "エラーメッセージを日本語に翻訳中...";
+        const translations = await translateMultiple([...textsToTranslate]);
+        console.log("翻訳完了:", translations);
+
         // 違反箇所をハイライト
         violations.forEach((violation, index) => {
           chrome.scripting.executeScript({
@@ -136,13 +138,14 @@ document.addEventListener("DOMContentLoaded", () => {
             func: (
               selector,
               failureSummaries,
-              translationCategoryMap,
-              index
+              violationHelp,
+              violationHelpUrl,
+              index,
+              translations
             ) => {
               document
                 .querySelectorAll(selector)
                 .forEach((element, nodeIndex) => {
-                  // アウトラインを追加してエラー箇所を強調
                   element.style.outline = "3px solid red";
                   element.style.position
                     ? element.style.position
@@ -151,61 +154,47 @@ document.addEventListener("DOMContentLoaded", () => {
                     "scroll-target-" + (index + 1) + "-" + (nodeIndex + 1)
                   );
 
-                  // ラベル（エラー内容と対処法）を作成
-                  // const tooltip = document.createElement("div");
-                  // tooltip.style.position = "absolute";
-                  // tooltip.style.background = "rgba(255, 255, 255, 0.9)";
-                  // tooltip.style.border = "1px solid #000";
-                  // tooltip.style.borderRadius = "4px";
-                  // tooltip.style.padding = "8px";
-                  // tooltip.style.color = "#000";
-                  // tooltip.style.fontSize = "12px";
-                  // tooltip.style.whiteSpace = "pre-wrap";
-                  // tooltip.style.zIndex = "1000";
-                  // tooltip.style.top = "100%";
-                  // tooltip.style.left = "0";
-                  // tooltip.style.marginTop = "4px";
-                  // tooltip.style.boxShadow = "0 4px 6px rgba(0, 0, 0, 0.1)";
-                  // tooltip.style.width = "300px";
+                  const tooltip = document.createElement("div");
+                  tooltip.style.position = "absolute";
+                  tooltip.style.background = "rgba(255, 255, 255, 0.9)";
+                  tooltip.style.border = "1px solid #000";
+                  tooltip.style.borderRadius = "4px";
+                  tooltip.style.padding = "8px";
+                  tooltip.style.color = "#000";
+                  tooltip.style.fontSize = "12px";
+                  tooltip.style.whiteSpace = "pre-wrap";
+                  tooltip.style.zIndex = "1000";
+                  tooltip.style.top = "100%";
+                  tooltip.style.left = "0";
+                  tooltip.style.marginTop = "4px";
+                  tooltip.style.boxShadow = "0 4px 6px rgba(0, 0, 0, 0.1)";
+                  tooltip.style.width = "300px";
 
-                  // console.log("summary:", Id);
+                  // 翻訳されたメッセージを使用
+                  const originalFailureSummary = failureSummaries[nodeIndex] || "エラーの詳細情報なし";
+                  const translatedHelp = translations[violationHelp] || violationHelp;
+                  const translatedFailureSummary = translations[originalFailureSummary] || originalFailureSummary;
 
-                  // 対応する翻訳データを取得
-                  // const failureSummaryKey = failureSummaries.find((summary) => {
-                  // console.log("summary", summary);
-                  // console.log(
-                  //   "translationCategoryMap",
-                  //   translationCategoryMap[summary]
-                  // );
-                  // });
+                  tooltip.innerText = `エラー内容: ${translatedHelp}\n\n詳細: ${translatedFailureSummary}\n\n参考: ${violationHelpUrl}`;
 
-                  // if (failureSummaryKey) {
-                  //   const translationData =
-                  //     translationCategoryMap[failureSummaryKey];
-                  //   tooltip.innerText = `エラー内容: ${translationData.translation}\n説明: ${translationData.description}\n詳細情報: ${translationData.url}`;
-                  // } else {
-                  //   tooltip.innerText =
-                  //     "対応する翻訳データが見つかりませんでした";
-                  // }
+                  element.appendChild(tooltip);
 
-                  // ツールチップを親要素に追加
-                  // element.appendChild(tooltip);
-
-                  // ツールチップをホバーで表示/非表示
-                  // tooltip.style.display = "none";
-                  // element.addEventListener("mouseenter", () => {
-                  //   tooltip.style.display = "block";
-                  // });
-                  // element.addEventListener("mouseleave", () => {
-                  //   tooltip.style.display = "none";
-                  // });
+                  tooltip.style.display = "none";
+                  element.addEventListener("mouseenter", () => {
+                    tooltip.style.display = "block";
+                  });
+                  element.addEventListener("mouseleave", () => {
+                    tooltip.style.display = "none";
+                  });
                 });
             },
             args: [
               violation.nodes.map((node) => node.target.join(", ")).join(", "),
               violation.nodes.map((node) => node.failureSummary), // failureSummary のリスト
-              translationCategoryMap, // 翻訳データ
+              violation.help, // ヘルプメッセージ
+              violation.helpUrl, // 参考URL
               index,
+              translations, // 翻訳データ
             ],
           });
         });
@@ -215,20 +204,21 @@ document.addEventListener("DOMContentLoaded", () => {
           resultsElement.innerText = "検査結果: 問題は検出されませんでした。";
         } else {
           const explanationList = violations.map((violation, index) => {
-            // 違反の概要
+            // 違反の概要（翻訳済み）
+            const translatedDescription = translations[violation.description] || violation.description;
+            const translatedHelp = translations[violation.help] || violation.help;
+
             const summary = `違反： ${index + 1}: ${violation.id}`;
-            const details = `詳細： ${violation.description}`;
-            const help = `説明： ${violation.help}`;
+            const details = `詳細： ${translatedDescription}`;
+            const help = `説明： ${translatedHelp}`;
             const helpUrl = `参考文献： ${violation.helpUrl}`;
 
             // 違反箇所のリスト
             const nodeDetails = violation.nodes
               .map((node, nodeIndex) => {
                 const selectors = node.target.join(", ");
-                const failureSummary = node.failureSummary
-                  ? translationCategoryMap[node.failureSummary]?.description ||
-                    node.failureSummary
-                  : "理由の説明はありません";
+                const originalFailureSummary = node.failureSummary || "理由の説明はありません";
+                const translatedFailureSummary = translations[originalFailureSummary] || originalFailureSummary;
 
                 // クリック可能なリンクを作成
                 return `
@@ -238,7 +228,7 @@ document.addEventListener("DOMContentLoaded", () => {
                   nodeIndex + 1
                 }">対象 ${nodeIndex + 1}: ${selectors}</a>
                 </span>
-                <span style="display: inline-block; margin: 6px 0 0; padding: 0; word-wrap: break-word; word-break: break-word; overflow-wrap: anywhere; white-space: normal;">${failureSummary}</span>
+                <span style="display: inline-block; margin: 6px 0 0; padding: 0; word-wrap: break-word; word-break: break-word; overflow-wrap: anywhere; white-space: normal;">${translatedFailureSummary}</span>
                 `;
               })
               .join("\n");
