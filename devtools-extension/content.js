@@ -17,19 +17,23 @@ document.addEventListener("DOMContentLoaded", () => {
       const scriptSrc = chrome.runtime.getURL("axe.min.js");
       const localeSrc = chrome.runtime.getURL("ja.json");
 
+      // DevToolsパネルのコンテキストで日本語ロケールを読み込む
+      const localeResponse = await fetch(localeSrc);
+      const localeData = await localeResponse.json();
+
       const result = await new Promise((resolve, reject) => {
         chrome.scripting.executeScript(
           {
             target: { tabId: chrome.devtools.inspectedWindow.tabId },
             world: "MAIN",
-            func: (src, localeSrc) => {
+            func: (src, localeData) => {
               return new Promise((innerResolve, innerReject) => {
                 console.log("スクリプトが注入されました:", src);
 
                 const script = document.createElement("script");
                 script.src = src;
 
-                script.onload = async () => {
+                script.onload = () => {
                   if (!window.axe || typeof window.axe.run !== "function") {
                     console.error("axe-core の run メソッドが利用できません");
                     innerReject("axe-core の run メソッドが利用できません");
@@ -37,10 +41,6 @@ document.addEventListener("DOMContentLoaded", () => {
                   }
 
                   try {
-                    // 日本語ロケールを読み込み
-                    const response = await fetch(localeSrc);
-                    const localeData = await response.json();
-
                     // axe-coreに日本語ロケールを適用
                     window.axe.configure({ locale: localeData });
                     console.log("日本語ロケールが適用されました");
@@ -56,7 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         innerReject({ success: false, error: err.message });
                       });
                   } catch (err) {
-                    console.error("ロケールの読み込みに失敗:", err);
+                    console.error("ロケールの設定に失敗:", err);
                     innerReject({ success: false, error: err.message });
                   }
                 };
@@ -72,7 +72,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 document.head.appendChild(script);
               });
             },
-            args: [scriptSrc, localeSrc],
+            args: [scriptSrc, localeData],
           },
           (injectionResults) => {
             if (chrome.runtime.lastError) {
